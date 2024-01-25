@@ -1,0 +1,118 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+# SEM workshop
+
+## Toby Tsang 24-01-2024
+
+First, generate some data. The details are not important. You only need to know that Y is a result of Z1, and X affects Z1 and Z2.
+
+```{r}
+library(MASS)
+V <- matrix(0.5,2,2)
+diag(V) <- 1
+set.seed(1218)
+X <- rnorm(100) #draw 100 numbers from a normal distribution
+correlated_noise <- mvrnorm(100,c(0,0),V)
+Z1 <- X*0.5+correlated_noise[,1] #Z1 is driven by X, plus some noise
+Z2 <- X*0.2+correlated_noise[,2] #Z2 too. But the slope is 0.2 
+Y <- Z1+rnorm(100) #Y is only determined by Z1
+df <- data.frame(X=X,Y=Y,Z1=Z1,Z2=Z2)
+cor(df)
+head(df)
+```
+
+## Some simple regressions
+
+Let's try to do some linear regression first, assume that you don't know how the data were generated. Let's say you are interested in the predictor of Y. 
+
+```{r}
+m1 <- lm(Y~X,data=df)
+summary(m1)
+
+m2 <- lm(Y~Z1,data=df)
+summary(m2)
+
+m3 <- lm(Y~Z2,data=df)
+summary(m3)
+```
+
+## Multiple regressions
+
+You might be interested in the effect of all variables, so you just throw all of them into a multiple regression. Also, a multiple regression can control the effect of different variables and better identify the independent effect of the variable of interest. For examples, if you put X and Z1 in, then you are looking at effects of X after controlling Z1 (and Z1 after controlling X). The statistical meaning between a multiple regression and bivariate regression, therefore, is very different. 
+
+Anyway if you look at the results below, you might conclude that Z1 is the only important variable, but not X. However, we know that X and drive Z1, because we simulated the data!
+
+```{r}
+m4 <- lm(Y~X+Z1+Z2,data=df)
+summary(m4)
+```
+
+Graphically, this model is examining the direct effect of each variable. The number here is standardized effect size (i.e. in the unit of 1 SD), thus they don't match the regression table output, which present unstandarized slope.
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+require(piecewiseSEM)
+SEM2 <- psem(m4)
+plot(SEM2)
+```
+
+## So why do we need SEM?
+The problem of multiple regression is that they can't tell the indirect effect of the predictors, such as how X affects Z1 and ultimately affects Y. 
+
+Let's use piecewiseSEM and build the SEM for the simulated data
+
+Notice the SEM includes m4 too. Try comparing their results! Did you find any differences?
+```{r,message=FALSE,warning=FALSE}
+require(piecewiseSEM)
+m5 <- lm(Z1~X,data=df)
+m6 <- lm(Z2~X,data=df)
+SEM1 <- psem(m5,
+             m6,
+             m4)
+summary(SEM1,.progressBar = F,conserve=T)
+plot(SEM1)
+```
+
+Pay attention to the tests of directed separation test and the global goodness-of-fit. If the former is significant, it is telling you that the two variables are correlated. This is POTENTIALLY a missing link and you should consider it. For both goodness-of-fit, if p < 0.05, it indicates our model is a poor fit of the data.
+I understand a lot of reviewers will not trust your model if any goodness-of-fit test shows p < 0.05. I never think this is a statistical problem (merely an inference problem), but if you want, you can always add missing link until p > 0.05 for both goodness-of-fit test.
+
+To add missing link, first consider whether there are causality between variables. If I am not sure, I will merely add a correlated error between them (%~~%), indicating they are correlated only.
+If we want to add a correlated error between Z2 and Z1
+```{r}
+SEM3 <-  psem(m5,
+             m6,
+             m4,
+             Z2 %~~% Z1)
+summary(SEM3,conserve=T)
+plot(SEM3)
+```
+
+# Model selection
+Actually, if you add some links recommended by psem, this is also an example of model selection. Model selection is a very broad topic and doesn't really have a standardized strategy. In piecewiseSEM you can also use AIC to evaluate different models
+
+Let's build another model without the link between X and Z1.
+
+```{r}
+SEM4 <- psem(m6,m4)
+summary(SEM4,conserve=T)
+
+```
+
+# Challenge 
+
+The figure below is extracted from Lee et al. 2023 (https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2745.14109). They are interested in how vegetation structure, fire history, and elevation interacts to determine ant species richness. This is their conceptual model
+
+```{r out.width="100%",echo=FALSE}
+url <- "https://besjournals.onlinelibrary.wiley.com/cms/asset/089e466b-e8a0-4a5f-8e67-a984a44f251f/jec14109-fig-0001-m.jpg"
+knitr::include_graphics(url)
+
+```
+
+Can you help Lee & colleagues to build the SEM? Let's keep things simple and assume normal distribution for everything. Note that if we need to do this seriously there are other distributions and statistical issues (e.g. spatial autocorrelation) to consider (read the actual paper...)
+
+Remember that there are few things to check after you build the model: 1) are all the hypothesized links included? 2) are the models consistent with the observed data, and 3) are there any missing links that we didn't consider in the coneptual model?
+
+```{r}
