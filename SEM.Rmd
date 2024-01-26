@@ -1,14 +1,15 @@
 ---
 output:
-  word_document: default
   html_document: default
+  word_document: default
   pdf_document: default
 ---
-# SEM workshop
+# Quick piecewiseSEM workshop
 
 ## Toby Tsang 24-01-2024
 
-First, generate some data. The details are not important. You only need to know that Y is a result of Z1, and X affects Z1 and Z2.
+First, generate some data. The details are not important. You only need to know \
+**1) Y increases with Z1 and 2) Z1 and Z2 increases with X.**
 
 ```{r}
 library(MASS)
@@ -16,13 +17,13 @@ V <- matrix(0.5,2,2)
 diag(V) <- 1
 set.seed(1218)
 X <- rnorm(100) #draw 100 numbers from a normal distribution
-correlated_noise <- mvrnorm(100,c(0,0),V)
+correlated_noise <- mvrnorm(100,c(0,0),V) #correlated noise between Z1 and Z2
 Z1 <- X*0.5+correlated_noise[,1] #Z1 is driven by X, plus some noise
 Z2 <- X*0.2+correlated_noise[,2] #Z2 too. But the slope is 0.2 
 Y <- Z1+rnorm(100) #Y is only determined by Z1
 df <- data.frame(X=X,Y=Y,Z1=Z1,Z2=Z2)
-cor(df)
-head(df)
+cor(df) #check pariwise correlations
+head(df) #look at the data
 ```
 
 ## Some simple regressions
@@ -51,7 +52,7 @@ m4 <- lm(Y~X+Z1+Z2,data=df)
 summary(m4)
 ```
 
-Graphically, this model is examining the direct effect of each variable. The number here is standardized effect size (i.e. in the unit of 1 SD), thus they don't match the regression table output, which present unstandarized slope.
+This model is examining the direct effect of each variable. The number here is standardized effect size (i.e. in the unit of 1 SD), thus they don't match the regression table output, which present unstandarized slope.
 
 ```{r, echo=FALSE,message=FALSE,warning=FALSE}
 require(piecewiseSEM)
@@ -62,11 +63,12 @@ plot(SEM2)
 ## So why do we need SEM?
 The problem of multiple regression is that they can't tell the indirect effect of the predictors, such as how X affects Z1 and ultimately affects Y. 
 
-Let's use piecewiseSEM and build the SEM for the simulated data
+Let's use piecewiseSEM and build the SEM for the simulated data. In piecewiseSEM, we build a SEM by including all individual models (also called component models) in the function **psem**.
 
-Notice the SEM includes m4 too. Try comparing their results! Did you find any differences?
+Thus, in the following SEMs, we have three component models (m4,m5,m6)
 ```{r,message=FALSE,warning=FALSE}
 require(piecewiseSEM)
+m4 <- lm(Y~X+Z1+Z2,data=df)
 m5 <- lm(Z1~X,data=df)
 m6 <- lm(Z2~X,data=df)
 SEM1 <- psem(m5,
@@ -75,44 +77,88 @@ SEM1 <- psem(m5,
 summary(SEM1,.progressBar = F,conserve=T)
 plot(SEM1)
 ```
+## Mini task
+**Try comparing the multiple regression and SEM results! What are the similarities and differences between two approaches?**
 
-Pay attention to the tests of directed separation test and the global goodness-of-fit. If the former is significant, it is telling you that the two variables are correlated. This is POTENTIALLY a missing link and you should consider it. For both goodness-of-fit, if p < 0.05, it indicates our model is a poor fit of the data.
-I understand a lot of reviewers will not trust your model if any goodness-of-fit test shows p < 0.05. I never think this is a statistical problem (merely an inference problem), but if you want, you can always add missing link until p > 0.05 for both goodness-of-fit test.
+## Missing link and model performance
+Pay attention to thedirected separation test and the global goodness-of-fit. If the former is significant, it is telling you that the two variables are correlated. This is POTENTIALLY a missing link and you should consider it. For both goodness-of-fit, if p < 0.05, it indicates our model is a poor fit of the data.
+I understand a lot of reviewers will not trust your model if any goodness-of-fit test shows p < 0.05. I never think this is a problem, unless you want to build a predictive model. However, I don't want to argue. If you want, you can always add missing link until p > 0.05 for both goodness-of-fit test.
 
 To add missing link, first consider whether there are causality between variables. If I am not sure, I will merely add a correlated error between them (%~~%), indicating they are correlated only.
 If we want to add a correlated error between Z2 and Z1
 ```{r}
-SEM3 <-  psem(m5,
+SEM2 <-  psem(m5,
              m6,
              m4,
              Z2 %~~% Z1)
-summary(SEM3,conserve=T)
+summary(SEM2,conserve=T)
+plot(SEM2)
+```
+
+## Mini task
+Let's build another model, without the link between X and Z1! The result shoud be something like this
+
+```{r,echo=FALSE}
+SEM3 <- psem(m6,
+             m4,
+             Z2 %~~% Z1)
+summary(SEM3,conserve=T,.progressBar = F)
 plot(SEM3)
 ```
 
-# Model selection
-Actually, if you add some links recommended by psem, this is also an example of model selection. Model selection is a very broad topic and doesn't really have a standardized strategy. In piecewiseSEM you can also use AIC to evaluate different models
+## Model selection
+Actually, if you add some links recommended by psem, this is also model selection. Model selection is a very broad topic and doesn't really have a standardized strategy. In piecewiseSEM you can also use AIC to evaluate different models
+SEM3 (the reduced model) has a lower AIC than SEM2. But we know that the link between Z1 and X is correct. What's happening???? \
 
-Let's build another model without the link between X and Z1.
+Turns out that the AIC of the SEM function is merely summing all AICs of the component models. For example, SEM4 has m4 and m6...so this is just the sum of AIC(m4) and AIC(m6).
 
 ```{r}
-SEM4 <- psem(m6,m4)
-summary(SEM4,conserve=T)
-
+AIC(SEM2,SEM3)
+AIC(m4)+AIC(m6)
+AIC(SEM3)
 ```
+
+**Note that given how the AIC is calculated, it might make more sense to compare AIC of SEMs with the same number of component models (and of course they should have the same responses). If you remove a component model, I don't think it is a fair comparison.**
 
 # Challenge 
 
-The figure below is extracted from Lee et al. 2023 (https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2745.14109). They are interested in how vegetation structure, fire history, and elevation interacts to determine ant species richness. This is their conceptual model
+The figure below is extracted from Lee et al. 2023 (https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2745.14109). They are interested in how vegetation structure, fire history, and elevation interacts to determine ant species richness. This is their conceptual model (Ignore MNND and MPD). 
 
+The data can be downloaded [here](https://github.com/tpaknok/SEM_Workshop/blob/main/SEM_Lee_et_al_2023.csv), or just use this code
+
+```{r}
+ant_url <- "https://github.com/tpaknok/SEM_Workshop/raw/main/SEM_Lee_et_al_2023.csv"
+ant <- read.csv(ant_url)
+head(ant)
+```
+
+```{r,echo=F,warning=F,message=F}
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+var_table <- data.frame(Name=c("Ele","TWI","Insol","Fire","Spp.richness","veg_pca1"),
+           Description=c("Elevation (m)","Topographic wetness index","Incoming solar radiation","The year of last fire","Number of ant species","Vegetation PCA1 score"))
+kable(var_table,caption="Variable descriptions") %>%   
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+Conceptual figure
 ```{r out.width="100%",echo=FALSE}
-url <- "https://besjournals.onlinelibrary.wiley.com/cms/asset/089e466b-e8a0-4a5f-8e67-a984a44f251f/jec14109-fig-0001-m.jpg"
+url <- "https://github.com/tpaknok/SEM_Workshop/raw/main/Lee_et_al_2023_Fig.jpg"
 knitr::include_graphics(url)
 
 ```
 
 Can you help Lee & colleagues to build the SEM? Let's keep things simple and assume normal distribution for everything. Note that if we need to do this seriously there are other distributions and statistical issues (e.g. spatial autocorrelation) to consider (read the actual paper...)
 
+**All SEMs should start with some theories. How should vegetation, fire and topography interact? What's the direct and indirect effect to each other? Think about it, before you construct your model**
+
 Remember that there are few things to check after you build the model: 1) are all the hypothesized links included? 2) are the models consistent with the observed data, and 3) are there any missing links that we didn't consider in the coneptual model?
 
 ```{r}
+ant_m1 <- lm(veg_pca1~Ele+TWI+Insol+Fire,data=ant)
+ant_m2 <- lm(Spp.richness~Ele+TWI+Insol+Fire+veg_pca1,data=ant)
+
+SEM_ant <- psem(ant_m1,ant_m2)
+summary(SEM_ant,conserve = T)
+```
