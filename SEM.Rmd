@@ -1,15 +1,22 @@
 ---
 output:
-  html_document: default
-  word_document: default
-  pdf_document: default
+  html_document:
+    code_folding: show
 ---
 # Quick piecewiseSEM workshop
 
-## Toby Tsang 24-01-2024
+Toby Tsang 24-01-2024 
 
+## Objectives
+After this workshop, hopefully you will be able to \
+1) Understand the differences between structural equation models and multiple regressions \
+2) Interpret results from piecewiseSEM \
+3) Build simple SEMs 
+
+## Simulated example
+We will use a simulated datset to illustrate the differences between SEMs and multiple regressions. \
 First, generate some data. The details are not important. You only need to know \
-**1) Y increases with Z1 and 2) Z1 and Z2 increases with X.**
+**1) Z1 increases Y and 2) X increases Z1 and Z2**
 
 ```{r}
 library(MASS)
@@ -28,7 +35,7 @@ head(df) #look at the data
 
 ## Some simple regressions
 
-Let's try to do some linear regression first, assume that you don't know how the data were generated. Let's say you are interested in the predictor of Y. 
+Assume that you don't know how the data were generated. Let's say you are interested in the predictors of Y, Let's try to do some bivariate regression first.
 
 ```{r}
 m1 <- lm(Y~X,data=df)
@@ -43,16 +50,16 @@ summary(m3)
 
 ## Multiple regressions
 
-You might be interested in the effect of all variables, so you just throw all of them into a multiple regression. Also, a multiple regression can control the effect of different variables and better identify the independent effect of the variable of interest. For examples, if you put X and Z1 in, then you are looking at effects of X after controlling Z1 (and Z1 after controlling X). The statistical meaning between a multiple regression and bivariate regression, therefore, is very different. 
+You might be interested in the effect of all variables, so you just throw all of them into a multiple regression. Also, a multiple regression can control the effect of different variables and better identify the independent effect of the variable of interest, given they are all highly correlated. For examples, if you put X and Z1 in, then you are looking at effects of X after controlling Z1 (and Z1 after controlling X). The statistical meaning between a multiple regression and bivariate regression, therefore, is very different. 
 
-Anyway if you look at the results below, you might conclude that Z1 is the only important variable, but not X. However, we know that X and drive Z1, because we simulated the data!
+If you look at the results below, you might conclude that Z1 is the only important variable, but not X. However, we know that X and drive Z1, because we simulated the data!
 
 ```{r}
 m4 <- lm(Y~X+Z1+Z2,data=df)
 summary(m4)
 ```
 
-This model is examining the direct effect of each variable. The number here is standardized effect size (i.e. in the unit of 1 SD), thus they don't match the regression table output, which present unstandarized slope.
+This model is examining the direct effect of each variable. It doesn't really care about the indirect effects between variables. The number here is standardized effect size (i.e. in the unit of 1 SD), thus they don't match the regression table output, which present unstandarized slope.
 
 ```{r, echo=FALSE,message=FALSE,warning=FALSE}
 require(piecewiseSEM)
@@ -77,50 +84,64 @@ SEM1 <- psem(m5,
 summary(SEM1,.progressBar = F,conserve=T)
 plot(SEM1)
 ```
-## Mini task
-**Try comparing the multiple regression and SEM results! What are the similarities and differences between two approaches?**
+## Challenge
+Try comparing the multiple regression and SEM results! What are the similarities and differences between the two approaches?
 
 ## Missing link and model performance
 Pay attention to thedirected separation test and the global goodness-of-fit. If the former is significant, it is telling you that the two variables are correlated. This is POTENTIALLY a missing link and you should consider it. For both goodness-of-fit, if p < 0.05, it indicates our model is a poor fit of the data.
-I understand a lot of reviewers will not trust your model if any goodness-of-fit test shows p < 0.05. I never think this is a problem, unless you want to build a predictive model. However, I don't want to argue. If you want, you can always add missing link until p > 0.05 for both goodness-of-fit test.
+I understand a lot of reviewers will not trust your model if any goodness-of-fit test shows p < 0.05. I never think this is a problem if the goal of your study is inference. It only becomes a problem if your goal is prediction. However, I am not asking you to fight about statistics in your ecological papers. If you want, you can always add missing links until p > 0.05 for both goodness-of-fit test.
 
 To add missing link, first consider whether there are causality between variables. If I am not sure, I will merely add a correlated error between them (%~~%), indicating they are correlated only.
 If we want to add a correlated error between Z2 and Z1
+
 ```{r}
 SEM2 <-  psem(m5,
              m6,
              m4,
              Z2 %~~% Z1)
-summary(SEM2,conserve=T)
+summary(SEM2,conserve=T,.progressBar = F)
 plot(SEM2)
 ```
 
-## Mini task
-Let's build another model, without the link between X and Z1! The result shoud be something like this
+Also, I will try to be clear about adding links that are not originally hypothesized. (You really shouldn't pretend that you had the link hypothesized after psem told you it was missing!) For examples, I wrote something like this in my paper....
 
-```{r,echo=FALSE}
-SEM3 <- psem(m6,
+**If the directed separation test indicated a missing relationship between community synchrony and population variability, we added a correlated error among them, as the causality of this relationship was unexpected from our model.**
+
+## Challenge
+Now try to build another model, but this time we assume no link between Z2 and X. How will you build it?
+
+```{r,class.source = 'fold-hide'}
+m7 <- lm(Z2~1,data=df)
+SEM3 <- psem(m5,
+             m7,
              m4,
              Z2 %~~% Z1)
-summary(SEM3,conserve=T,.progressBar = F)
-plot(SEM3)
+
+#This is different!!! see model selection below
+SEM4 <- psem(m5,
+             m4,
+             Z2 %~~% Z1) 
 ```
 
 ## Model selection
-Actually, if you add some links recommended by psem, this is also model selection. Model selection is a very broad topic and doesn't really have a standardized strategy. In piecewiseSEM you can also use AIC to evaluate different models
-SEM3 (the reduced model) has a lower AIC than SEM2. But we know that the link between Z1 and X is correct. What's happening???? \
-
-Turns out that the AIC of the SEM function is merely summing all AICs of the component models. For example, SEM4 has m4 and m6...so this is just the sum of AIC(m4) and AIC(m6).
+Actually, if you add some links recommended by psem, you are already doing model selection. Model selection is a very broad topic and doesn't really have a standardized strategy - even though some strategies such as AIC are commonly used. In piecewiseSEM, you can also use AIC to evaluate different models.
 
 ```{r}
-AIC(SEM2,SEM3)
-AIC(m4)+AIC(m6)
-AIC(SEM3)
+AIC(SEM2,SEM3,SEM4)
 ```
+SEM4 (the model without m7) has a lower AIC than SEM2 (Lower AIC = better). But we know that the link between Z1 and X is correct. What's happening???? \
 
-**Note that given how the AIC is calculated, it might make more sense to compare AIC of SEMs with the same number of component models (and of course they should have the same responses). If you remove a component model, I don't think it is a fair comparison.**
+```{r}
+AIC(m4)+AIC(m5)
+AIC(SEM4)
+AIC(m5)+AIC(m6)+AIC(m4)
+AIC(SEM2)
+```
+Turns out that the AIC of the SEM function is merely summing all AICs of the component models. For example, SEM4 has m4 and m5...so this is just the sum of AIC(m4) and AIC(m6).
 
-# Challenge 
+**Note that given how the AIC is calculated, it might make more sense to compare AIC of SEMs with the same number of component models (and of course they should have the same responses). If SEMs have different number of component models, this won't be a fair comparison.**
+
+## Case study 
 
 The figure below is extracted from Lee et al. 2023 (https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2745.14109). They are interested in how vegetation structure, fire history, and elevation interacts to determine ant species richness. This is their conceptual model (Ignore MNND and MPD). 
 
@@ -149,13 +170,13 @@ knitr::include_graphics(url)
 
 ```
 
-Can you help Lee & colleagues to build the SEM? Let's keep things simple and assume normal distribution for everything. Note that if we need to do this seriously there are other distributions and statistical issues (e.g. spatial autocorrelation) to consider (read the actual paper...)
+Can you help Roger build the SEM? Let's keep things simple and assume normal distribution for everything. Note that if we need to do this seriously there are other distributions to use. The datsaet has other statistical issues such as pseudoreplications too... (read the actual paper if you are interested)
 
-**All SEMs should start with some theories. How should vegetation, fire and topography interact? What's the direct and indirect effect to each other? Think about it, before you construct your model**
+**Before constructing the SEM, you should think about how vegetation, fire and topography variables interact? What's the direct and indirect effect to each other?**
 
 Remember that there are few things to check after you build the model: 1) are all the hypothesized links included? 2) are the models consistent with the observed data, and 3) are there any missing links that we didn't consider in the coneptual model?
 
-```{r}
+```{r, echo=FALSE, results = "hide"}
 ant_m1 <- lm(veg_pca1~Ele+TWI+Insol+Fire,data=ant)
 ant_m2 <- lm(Spp.richness~Ele+TWI+Insol+Fire+veg_pca1,data=ant)
 
