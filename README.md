@@ -23,3 +23,6 @@ After the workshop, you should...
 
 # Reference
 Lee, R. H., Kwong, I. H., Tsang, T. P., Wong, M. K., & Guénard, B. (2023). Remotely sensed environmental data as ecological proxies for ground‐dwelling ant diversity along a subtropical forest succession gradient. Journal of Ecology.
+
+# Contact
+Pak Nok Toby Tsang (paknok.tsang@utoronto.ca)
